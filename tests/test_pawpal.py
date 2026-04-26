@@ -8,10 +8,10 @@ Run with:  pytest tests/ -v
 import sys
 import os
 
-# Add the project root to the path so we can import pawpal_system
+# Add the project root to the path so we can import the src/ package.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from pawpal_system import Task, Pet, Owner, Scheduler
+from src.pawpal_system import Task, Pet, Owner, Scheduler
 
 
 # ──────────────────────────────────────────────

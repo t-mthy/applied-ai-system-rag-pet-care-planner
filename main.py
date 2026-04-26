@@ -6,7 +6,7 @@ prints a readable daily schedule to the terminal.
 It verifies that our backend logic works before we touch the UI.
 """
 
-from pawpal_system import Task, Pet, Owner, Scheduler
+from src.pawpal_system import Task, Pet, Owner, Scheduler
 from datetime import date
 
 

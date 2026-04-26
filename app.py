@@ -10,7 +10,7 @@ import streamlit as st
 from datetime import date, time
 
 # Import our backend classes from the logic layer
-from pawpal_system import Task, Pet, Owner, Scheduler
+from src.pawpal_system import Task, Pet, Owner, Scheduler
 
 
 # ──────────────────────────────────────────────

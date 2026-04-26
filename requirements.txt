@@ -1,2 +1,15 @@
+# ── Core (existing PawPal+) ──
 streamlit>=1.30
 pytest>=7.0
+
+# ── RAG additions (filled in during later phases) ──
+# Phase 3 — retrieval (sentence-transformers + numpy)
+# sentence-transformers>=2.2
+# numpy>=1.24
+#
+# Phase 4 — generation (LLM client)
+# anthropic>=0.34
+# python-dotenv>=1.0
+#
+# Phase 7 — eval harness
+# pyyaml>=6.0
