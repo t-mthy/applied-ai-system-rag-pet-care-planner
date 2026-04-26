@@ -1,15 +1,16 @@
+# PawPal+ AI — Retrieval-Augmented Pet Care Planner
+# Offline-first stack: no API keys, no model downloads, no network at runtime.
+# A single `pip install -r requirements.txt` is everything needed.
+
 # ── Core (existing PawPal+) ──
 streamlit>=1.30
 pytest>=7.0
 
-# ── RAG additions (filled in during later phases) ──
-# Phase 3 — retrieval (sentence-transformers + numpy)
-# sentence-transformers>=2.2
-# numpy>=1.24
-#
-# Phase 4 — generation (LLM client)
-# anthropic>=0.34
-# python-dotenv>=1.0
-#
-# Phase 7 — eval harness
-# pyyaml>=6.0
+# ── RAG layer (Tier C: classical IR + template synthesis) ──
+# scikit-learn powers the TF-IDF retriever in src/retriever.py.
+# numpy is pulled in transitively but pinned here for clarity.
+scikit-learn>=1.3
+numpy>=1.24
+
+# ── Eval harness ──
+# Phase 7's eval cases live in eval/cases.json (stdlib json, no extra deps).
