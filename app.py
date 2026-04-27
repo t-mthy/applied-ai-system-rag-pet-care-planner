@@ -20,6 +20,7 @@ from src.rag_planner import (
     suggest_tasks_for_pet,
 )
 from src.retriever import Retriever
+from src.guardrails import compute_confidence
 
 
 # ──────────────────────────────────────────────
@@ -254,11 +255,17 @@ if suggestions:
         with cols[1]:
             st.markdown(header)
             with st.expander("Why this was suggested"):
+                # Confidence is the UI-friendly score: 0.5 floor for
+                # passing the species + life_stage filter, with TF-IDF
+                # similarity adding the rest. Computed at display time
+                # via the guardrails utility — keeps Suggestion clean.
+                confidence = compute_confidence(s.retrieval_score)
                 st.markdown(s.rationale)
                 st.markdown(
                     f"**Source:** {s.source}  \n"
                     f"**Source URL:** {s.source_url}  \n"
                     f"**Citation handle:** `{s.source_id}`  \n"
+                    f"**Confidence:** {confidence:.2f}  \n"
                     f"**Retrieval relevance:** {s.retrieval_score:.3f}"
                 )
         if checked:

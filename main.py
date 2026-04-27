@@ -13,6 +13,7 @@ from src.rag_planner import (
     suggest_tasks_for_pet,
 )
 from src.retriever import Retriever
+from src.guardrails import compute_confidence
 from datetime import date
 
 
@@ -200,13 +201,16 @@ def main():
             print()
             continue
 
-        # Show the suggested day, sorted by time, with citations.
+        # Show the suggested day, sorted by time, with citations
+        # and the per-task confidence score from the guardrails layer.
         print(f"  {len(suggestions)} grounded suggestion(s):")
         for s in sorted(suggestions, key=lambda x: x.suggested_time):
+            confidence = compute_confidence(s.retrieval_score)
             print(
                 f"    {s.suggested_time}  "
                 f"{s.description:<35}  "
                 f"prio={s.priority:<6}  "
+                f"conf={confidence:.2f}  "
                 f"[{s.source_id}]"
             )
         print()

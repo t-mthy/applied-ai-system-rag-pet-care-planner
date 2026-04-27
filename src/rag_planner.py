@@ -21,6 +21,12 @@ import logging
 from datetime import date
 
 from src.generator import Suggestion, generate_suggestions
+from src.guardrails import (
+    apply_output_guardrail,
+    log_event,
+    validate_pet_profile,
+    validate_query,
+)
 from src.pawpal_system import Pet, Task
 from src.retriever import Retriever
 
@@ -100,30 +106,100 @@ def suggest_tasks_for_pet(
     app caches one in ``session_state``). When omitted, a fresh
     Retriever is built — fine for CLI and tests, but rebuilds the
     TF-IDF index on every call, so don't do this in a request loop.
+
+    The pipeline runs in this order, with structured log events at
+    each step (see `src/guardrails.py` for the JSON-lines format):
+
+      1. validate_pet_profile  — reject unsupported species / bad ages
+      2. validate_query        — reject oversized / non-string queries
+      3. derive_life_stage     — map age to KB life-stage label
+      4. retriever.retrieve    — metadata filter + TF-IDF cosine
+      5. generate_suggestions  — template-based synthesis
+      6. apply_output_guardrail— citation-validation backstop
     """
+    # ── 1 & 2. Input validation (reject early, log the reason) ──
+    pv = validate_pet_profile(pet.species, pet.age)
+    if not pv.valid:
+        log_event(
+            "input.rejected",
+            stage="pet_profile",
+            pet=pet.name,
+            species=pet.species,
+            age=pet.age,
+            errors=list(pv.errors),
+        )
+        return []
+
+    qv = validate_query(query)
+    if not qv.valid:
+        log_event(
+            "input.rejected",
+            stage="query",
+            pet=pet.name,
+            errors=list(qv.errors),
+        )
+        return []
+
+    # ── 3. Derive life stage ──
     life_stage = derive_life_stage(pet.species, pet.age)
     if life_stage is None:
-        logger.info(
-            "RAG planner: no KB coverage for species=%r (pet=%r)",
-            pet.species, pet.name,
+        # Defense in depth — validate_pet_profile should already
+        # have caught this, but if a new species is added to the KB
+        # without updating the bands, return clean empty.
+        log_event(
+            "input.rejected",
+            stage="life_stage_derivation",
+            pet=pet.name,
+            species=pet.species,
+            age=pet.age,
         )
         return []
 
     if retriever is None:
         retriever = Retriever()
 
+    # ── 4. Retrieve ──
     results = retriever.retrieve(
         species=pet.species.lower().strip(),
         life_stage=life_stage,
         query=query,
         top_k=top_k,
     )
-    suggestions = generate_suggestions(results, pet_name=pet.name)
-    logger.info(
-        "RAG planner: pet=%r species=%r life_stage=%r → %d suggestions",
-        pet.name, pet.species, life_stage, len(suggestions),
+    log_event(
+        "retrieve",
+        pet=pet.name,
+        species=pet.species,
+        life_stage=life_stage,
+        query=query,
+        top_k=top_k,
+        n_results=len(results),
+        retrieved_ids=[r.chunk.id for r in results],
     )
-    return suggestions
+
+    # ── 5. Generate ──
+    raw_suggestions = generate_suggestions(results, pet_name=pet.name)
+    log_event(
+        "generate",
+        pet=pet.name,
+        n_suggestions=len(raw_suggestions),
+    )
+
+    # ── 6. Output guardrail (citation-validation backstop) ──
+    guard = apply_output_guardrail(raw_suggestions, results)
+    log_event(
+        "guard",
+        pet=pet.name,
+        n_accepted=len(guard.accepted),
+        n_rejected=len(guard.rejected),
+        rejected_reasons=[reason for _, reason in guard.rejected],
+    )
+
+    logger.info(
+        "RAG planner: pet=%r species=%r life_stage=%r → %d accepted, %d rejected",
+        pet.name, pet.species, life_stage,
+        len(guard.accepted), len(guard.rejected),
+    )
+    return guard.accepted
 
 
 # ──────────────────────────────────────────────────────────────────
