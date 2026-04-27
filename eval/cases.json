@@ -1,0 +1,124 @@
+{
+  "_comment": "Evaluation cases for PawPal+ AI. Each case runs the full RAG pipeline (validate → retrieve → generate → guard) for one pet profile and asserts a list of expected behaviors. See eval/run_eval.py for the check registry. Cases 1-6 are happy-path species/life-stage profiles; cases 7-8 are edge cases that exercise the guardrails.",
+  "cases": [
+    {
+      "id": "puppy_dog",
+      "description": "Puppy dog (age 0) should get a balanced day plan with short walks, multiple feedings, and grooming practice.",
+      "pet": {"name": "Biscuit", "species": "dog", "age": 0},
+      "query": null,
+      "expectations": [
+        {"check": "min_suggestions", "value": 5,
+         "rationale": "Puppy KB has 3 chunks (feeding/exercise/grooming) with 2-3 templates each."},
+        {"check": "all_have_citations",
+         "rationale": "Every suggestion must trace back to a KB doc."},
+        {"check": "topic_present", "value": "feeding",
+         "rationale": "Puppies need scheduled meals."},
+        {"check": "topic_present", "value": "exercise",
+         "rationale": "Puppies need daily activity."},
+        {"check": "topic_present", "value": "grooming",
+         "rationale": "Puppies should get early handling practice."},
+        {"check": "max_duration_for_topic", "value": {"topic": "exercise", "max": 20},
+         "rationale": "Puppy walks should be short (5-min-per-month-of-age rule)."},
+        {"check": "description_contains_any", "value": ["walk"],
+         "rationale": "A puppy day plan should include at least one walk."}
+      ]
+    },
+    {
+      "id": "adult_dog",
+      "description": "Adult dog (age 3) should get walks, two main meals, and routine grooming.",
+      "pet": {"name": "Mochi", "species": "dog", "age": 3},
+      "query": null,
+      "expectations": [
+        {"check": "min_suggestions", "value": 5,
+         "rationale": "Adult dog KB has 3 chunks (feeding/exercise/grooming) with multiple templates."},
+        {"check": "all_have_citations",
+         "rationale": "Every suggestion must trace back to a KB doc."},
+        {"check": "topic_present", "value": "feeding"},
+        {"check": "topic_present", "value": "exercise"},
+        {"check": "topic_present", "value": "grooming"},
+        {"check": "description_contains_any", "value": ["walk", "training"],
+         "rationale": "Adult plans should include at least one physical activity item."}
+      ]
+    },
+    {
+      "id": "senior_dog",
+      "description": "Senior dog (age 10) should get gentler/shorter walks and senior-portioned meals. KB has no senior-dog-grooming chunk by design.",
+      "pet": {"name": "Rex", "species": "dog", "age": 10},
+      "query": null,
+      "expectations": [
+        {"check": "min_suggestions", "value": 4,
+         "rationale": "Senior dog KB has 2 chunks (feeding + exercise)."},
+        {"check": "all_have_citations"},
+        {"check": "topic_present", "value": "feeding"},
+        {"check": "topic_present", "value": "exercise"},
+        {"check": "max_duration_for_topic", "value": {"topic": "exercise", "max": 25},
+         "rationale": "Senior dog walks should be shorter / lower-impact than adult walks."}
+      ]
+    },
+    {
+      "id": "adult_cat",
+      "description": "Adult cat (age 5) should get two measured meals plus interactive play.",
+      "pet": {"name": "Whiskers", "species": "cat", "age": 5},
+      "query": null,
+      "expectations": [
+        {"check": "min_suggestions", "value": 4,
+         "rationale": "Adult cat KB has 2 chunks (feeding + play) with 2 templates each."},
+        {"check": "all_have_citations"},
+        {"check": "topic_present", "value": "feeding"},
+        {"check": "topic_present", "value": "play"},
+        {"check": "description_contains_any", "value": ["play", "session"],
+         "rationale": "Adult cats need scheduled play."}
+      ]
+    },
+    {
+      "id": "senior_cat",
+      "description": "Senior cat (age 12) should get smaller, more frequent meals (KB only covers feeding for senior cats).",
+      "pet": {"name": "Smokey", "species": "cat", "age": 12},
+      "query": null,
+      "expectations": [
+        {"check": "min_suggestions", "value": 3,
+         "rationale": "Senior cat KB only has 1 chunk (feeding) with 3 templates."},
+        {"check": "all_have_citations"},
+        {"check": "topic_present", "value": "feeding"},
+        {"check": "topic_count_min", "value": {"topic": "feeding", "min": 3},
+         "rationale": "Senior cats benefit from 3+ smaller meals — breakfast, midday, dinner."}
+      ]
+    },
+    {
+      "id": "adult_rabbit",
+      "description": "Adult rabbit should get hay, leafy greens, out-of-cage exercise, and enrichment.",
+      "pet": {"name": "Pepper", "species": "rabbit", "age": 2},
+      "query": null,
+      "expectations": [
+        {"check": "min_suggestions", "value": 5,
+         "rationale": "Rabbit KB has 3 chunks (feeding/exercise/enrichment)."},
+        {"check": "all_have_citations"},
+        {"check": "topic_present", "value": "feeding"},
+        {"check": "topic_present", "value": "exercise"},
+        {"check": "topic_present", "value": "enrichment"},
+        {"check": "description_contains_any", "value": ["hay"],
+         "rationale": "Hay is the foundation of a rabbit's diet — must appear in the plan."}
+      ]
+    },
+    {
+      "id": "edge_unsupported_species",
+      "description": "Edge case: hamster is outside the KB. Input validator should reject the call before any retrieval, returning an empty list.",
+      "pet": {"name": "Hammy", "species": "hamster", "age": 2},
+      "query": null,
+      "expectations": [
+        {"check": "expect_empty",
+         "rationale": "Guardrail must refuse to invent suggestions for species outside the KB."}
+      ]
+    },
+    {
+      "id": "edge_invalid_age",
+      "description": "Edge case: an age below the minimum should be rejected by the input validator.",
+      "pet": {"name": "Buddy", "species": "dog", "age": -1},
+      "query": null,
+      "expectations": [
+        {"check": "expect_empty",
+         "rationale": "Guardrail must refuse pets with implausible ages."}
+      ]
+    }
+  ]
+}
