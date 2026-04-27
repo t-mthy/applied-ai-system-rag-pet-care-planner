@@ -1,7 +1,7 @@
 # PawPal+ AI — A Retrieval-Augmented Pet Care Planner
 
-> *From task list to grounded care coach — PawPal+ now looks up real pet-care
-> guidance before suggesting your pet's day.*
+> _From task list to grounded care coach — PawPal+ now looks up real pet-care
+> guidance before suggesting your pet's day._
 
 PawPal+ AI is a small but complete applied-AI system. You enter your pet's
 species and age, and the app proposes a full daily care plan (meals, walks,
@@ -16,9 +16,7 @@ API keys, no model downloads, and no usage costs.
 
 ## 📺 Demo Video
 
-**YouTube walkthrough:** *coming soon — link will be added here.*
-
-<!-- TODO: replace the line above with the actual YouTube embed/link once recorded. -->
+**YouTube walkthrough:** [![Watch the video](https://www.youtube.com/watch?v=X7pacCwOsVE)](https://www.youtube.com/watch?v=X7pacCwOsVE)
 
 ---
 
@@ -53,7 +51,7 @@ We added a **Retrieval-Augmented Generation (RAG)** pipeline. In plain words:
 4. Every suggested task carries a **citation** back to the note it came
    from, including the source organization and a link.
 5. Nothing is silently added to your schedule. You review the suggestions,
-   check the ones you want, and click *Add selected to plan*.
+   check the ones you want, and click _Add selected to plan_.
 
 Because the whole pipeline is deterministic, the same pet profile always
 produces the same plan — easy to test, easy to trust.
@@ -307,9 +305,17 @@ The input validator catches this before any retrieval happens. A
 structured log entry is written:
 
 ```json
-{"ts": "...", "event": "input.rejected", "stage": "pet_profile",
- "pet": "Hammy", "species": "hamster", "age": 2,
- "errors": ["species 'hamster' is not in the supported KB (['cat', 'dog', 'rabbit'])"]}
+{
+  "ts": "...",
+  "event": "input.rejected",
+  "stage": "pet_profile",
+  "pet": "Hammy",
+  "species": "hamster",
+  "age": 2,
+  "errors": [
+    "species 'hamster' is not in the supported KB (['cat', 'dog', 'rabbit'])"
+  ]
+}
 ```
 
 This is the system being **honest about what it doesn't know** rather
@@ -374,13 +380,13 @@ Three layers of confidence:
 
 **1. Unit tests — `pytest tests/ -v`** — **111 passing** in under a second.
 
-| Module | Tests |
-|---|---|
-| Original PawPal+ Core | 21 |
-| Retriever (load / filter / rank / synonyms / top-k) | 18 |
-| Generator (fan-out / citations / determinism / end-to-end) | 14 |
-| RAG Planner (life-stage / orchestration / conversion / pipeline) | 24 |
-| Guardrails (validation / guardrail / confidence / logger) | 34 |
+| Module                                                           | Tests |
+| ---------------------------------------------------------------- | ----- |
+| Original PawPal+ Core                                            | 21    |
+| Retriever (load / filter / rank / synonyms / top-k)              | 18    |
+| Generator (fan-out / citations / determinism / end-to-end)       | 14    |
+| RAG Planner (life-stage / orchestration / conversion / pipeline) | 24    |
+| Guardrails (validation / guardrail / confidence / logger)        | 34    |
 
 **2. Evaluation harness — `python eval/run_eval.py`** — **35/35 checks
 across 8 cases**, all green.
@@ -413,7 +419,7 @@ be audited offline. The file is gitignored — it stays local.
 **4. Human-in-the-loop checkpoint.** In the Streamlit UI, no AI-suggested
 task is ever silently committed. The user reviews each suggestion (with
 its citation visible) and explicitly checks the ones they want before
-clicking *Add selected to plan*.
+clicking _Add selected to plan_.
 
 ---
 
