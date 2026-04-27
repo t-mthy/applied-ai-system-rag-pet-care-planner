@@ -12,6 +12,15 @@ from datetime import date, time
 # Import our backend classes from the logic layer
 from src.pawpal_system import Task, Pet, Owner, Scheduler
 
+# RAG layer — Retriever (TF-IDF over kb/) and the seam that turns
+# Suggestions into Tasks attached to a Pet.
+from src.rag_planner import (
+    apply_suggestions_to_pet,
+    derive_life_stage,
+    suggest_tasks_for_pet,
+)
+from src.retriever import Retriever
+
 
 # ──────────────────────────────────────────────
 # Page config (must be the first Streamlit call)
@@ -31,6 +40,15 @@ if "owner" not in st.session_state:
     st.session_state.owner = None
 if "scheduler" not in st.session_state:
     st.session_state.scheduler = None
+# Cache the Retriever so the TF-IDF index is built once per browser
+# session, not on every Streamlit rerun.
+if "retriever" not in st.session_state:
+    st.session_state.retriever = None
+# RAG suggestions need to survive reruns until the user accepts/dismisses.
+if "rag_suggestions" not in st.session_state:
+    st.session_state.rag_suggestions = []
+if "rag_target_pet" not in st.session_state:
+    st.session_state.rag_target_pet = None
 
 
 # ══════════════════════════════════════════════
@@ -136,9 +154,144 @@ st.divider()
 
 
 # ══════════════════════════════════════════════
-# SECTION 4: Daily Schedule
+# SECTION 4: Suggest Tasks (AI)
 # ══════════════════════════════════════════════
-st.header("4. Daily Schedule")
+# Retrieval-Augmented planner: pulls grounded pet-care guidance from
+# the offline knowledge base and turns it into Suggestion objects
+# the user can review and accept. Nothing the AI proposes is silently
+# committed — the user must click "Add selected to plan".
+st.header("4. Suggest Tasks (AI)")
+st.caption(
+    "PawPal+ AI looks up your pet's profile in a curated, attributed "
+    "knowledge base and proposes care tasks grounded in those documents. "
+    "Every suggestion shows its source so you can verify the recommendation."
+)
+
+# Lazy-build the Retriever the first time this section runs.
+# Building the TF-IDF index is fast (~ms) but we still avoid re-doing
+# it on every Streamlit rerun.
+if st.session_state.retriever is None:
+    with st.spinner("Indexing knowledge base…"):
+        st.session_state.retriever = Retriever()
+
+retriever = st.session_state.retriever
+
+col_rag1, col_rag2 = st.columns([1, 2])
+with col_rag1:
+    rag_pet_name = st.selectbox(
+        "Get suggestions for", pet_names, key="rag_pet_name",
+    )
+with col_rag2:
+    rag_query = st.text_input(
+        "Optional focus (leave blank for a full plan)",
+        value="",
+        key="rag_query",
+        placeholder="e.g. 'feeding nutrition' or 'exercise walks'",
+    )
+
+if st.button("Get suggestions"):
+    rag_pet = owner.get_pet(rag_pet_name)
+    if rag_pet is None:
+        st.error("Could not find that pet.")
+    else:
+        # Pre-flight: warn if species isn't covered by the KB. The
+        # planner returns [] in that case, but a clearer message helps.
+        stage = derive_life_stage(rag_pet.species, rag_pet.age)
+        if stage is None:
+            st.warning(
+                f"PawPal+ AI's knowledge base currently covers dogs, cats, "
+                f"and rabbits. Suggestions aren't available for "
+                f"\"{rag_pet.species}\" pets yet."
+            )
+            st.session_state.rag_suggestions = []
+        else:
+            suggestions = suggest_tasks_for_pet(
+                rag_pet,
+                query=rag_query.strip() or None,
+                retriever=retriever,
+            )
+            st.session_state.rag_suggestions = suggestions
+            st.session_state.rag_target_pet = rag_pet_name
+            if suggestions:
+                st.success(
+                    f"Found {len(suggestions)} grounded suggestion(s) for "
+                    f"{rag_pet_name} ({rag_pet.species}, {stage})."
+                )
+            else:
+                st.info(
+                    f"No suggestions matched. Try a different focus query."
+                )
+
+# Display the current suggestion set (survives reruns).
+suggestions = st.session_state.rag_suggestions
+if suggestions:
+    target_pet_name = st.session_state.rag_target_pet
+    st.subheader(f"Suggestions for {target_pet_name}")
+    st.caption(
+        "Review each suggestion below, check the ones you want, then "
+        "click **Add selected to plan**. Expand any row to see why it "
+        "was suggested."
+    )
+
+    # Sort chronologically so the previewed plan reads like a day.
+    chrono = sorted(suggestions, key=lambda s: s.suggested_time)
+
+    # One checkbox per suggestion; we collect indexes the user accepted.
+    accepted_idx: list[int] = []
+    for i, s in enumerate(chrono):
+        # Build a header line that's compact but informative.
+        header = (
+            f"`{s.suggested_time}` — **{s.description}** · "
+            f"{s.duration_minutes} min · {s.priority} priority · "
+            f"{s.frequency}"
+        )
+        cols = st.columns([0.08, 0.92])
+        with cols[0]:
+            checked = st.checkbox(
+                "Accept", key=f"rag_accept_{i}",
+                label_visibility="collapsed",
+            )
+        with cols[1]:
+            st.markdown(header)
+            with st.expander("Why this was suggested"):
+                st.markdown(s.rationale)
+                st.markdown(
+                    f"**Source:** {s.source}  \n"
+                    f"**Source URL:** {s.source_url}  \n"
+                    f"**Citation handle:** `{s.source_id}`  \n"
+                    f"**Retrieval relevance:** {s.retrieval_score:.3f}"
+                )
+        if checked:
+            accepted_idx.append(i)
+
+    col_apply1, col_apply2 = st.columns([1, 1])
+    with col_apply1:
+        if st.button("Add selected to plan", type="primary"):
+            if not accepted_idx:
+                st.warning("Select at least one suggestion to add.")
+            else:
+                target_pet = owner.get_pet(target_pet_name)
+                accepted = [chrono[i] for i in accepted_idx]
+                added = apply_suggestions_to_pet(target_pet, accepted)
+                st.success(
+                    f"Added {len(added)} task(s) to {target_pet_name}. "
+                    f"They'll appear in the schedule below."
+                )
+                # Clear suggestions so the UI doesn't re-add on next click.
+                st.session_state.rag_suggestions = []
+                st.rerun()
+    with col_apply2:
+        if st.button("Dismiss suggestions"):
+            st.session_state.rag_suggestions = []
+            st.rerun()
+
+st.divider()
+
+
+# ══════════════════════════════════════════════
+# SECTION 5: Daily Schedule
+# ══════════════════════════════════════════════
+st.header("5. Daily Schedule")
 
 schedule_date = st.date_input(
     "View schedule for", value=date.today(), key="schedule_date"
@@ -221,14 +374,14 @@ st.divider()
 
 
 # ══════════════════════════════════════════════
-# SECTION 5: Task Management
+# SECTION 6: Task Management
 # ══════════════════════════════════════════════
-st.header("5. Task Management")
+st.header("6. Task Management")
 
 all_tasks = owner.get_all_tasks()
 
 if not all_tasks:
-    st.info("No tasks to manage yet. Add some in Section 3.")
+    st.info("No tasks to manage yet. Add some in Section 3 or use AI suggestions in Section 4.")
 else:
     # ── Filtering controls ──
     st.subheader("Filter & Sort")

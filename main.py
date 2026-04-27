@@ -7,6 +7,12 @@ It verifies that our backend logic works before we touch the UI.
 """
 
 from src.pawpal_system import Task, Pet, Owner, Scheduler
+from src.rag_planner import (
+    apply_suggestions_to_pet,
+    derive_life_stage,
+    suggest_tasks_for_pet,
+)
+from src.retriever import Retriever
 from datetime import date
 
 
@@ -157,6 +163,80 @@ def main():
         print(f"  2-hour slot available at:  {slot_120}")
     else:
         print("  No 2-hour slot available today.")
+
+    print("=" * 58)
+    print()
+
+    # ──────────────────────────────────────────
+    # Step 9: RAG demo — grounded AI suggestions
+    # ──────────────────────────────────────────
+    # Add a third pet (a puppy) so the demo exercises a different
+    # life_stage band and shows the planner adapting to it.
+    print("=" * 58)
+    print("  PawPal+ AI — RAG Suggestion Demo")
+    print("=" * 58)
+
+    # Build the Retriever once and reuse for both pets (the TF-IDF
+    # index isn't free to construct, even if it's cheap).
+    retriever = Retriever()
+
+    biscuit = Pet(name="Biscuit", species="dog", age=0)  # puppy
+    owner.add_pet(biscuit)
+    print(f"  Added puppy {biscuit.name} ({biscuit.species}, age {biscuit.age}).")
+    print()
+
+    for demo_pet in [biscuit, whiskers]:
+        stage = derive_life_stage(demo_pet.species, demo_pet.age)
+        print("-" * 58)
+        print(f"  Pet: {demo_pet.name} — {demo_pet.species}, "
+              f"age {demo_pet.age} → life_stage={stage!r}")
+        print("-" * 58)
+
+        # Default call: no query, all matching chunks.
+        suggestions = suggest_tasks_for_pet(demo_pet, retriever=retriever)
+
+        if not suggestions:
+            print("  (no KB coverage for this pet)")
+            print()
+            continue
+
+        # Show the suggested day, sorted by time, with citations.
+        print(f"  {len(suggestions)} grounded suggestion(s):")
+        for s in sorted(suggestions, key=lambda x: x.suggested_time):
+            print(
+                f"    {s.suggested_time}  "
+                f"{s.description:<35}  "
+                f"prio={s.priority:<6}  "
+                f"[{s.source_id}]"
+            )
+        print()
+
+        # Show one full rationale to demonstrate UI-style citation.
+        first = sorted(suggestions, key=lambda x: x.suggested_time)[0]
+        print(f"  Sample rationale (first suggestion):")
+        print(f"    {first.rationale}")
+        print(f"    (See: {first.source_url})")
+        print()
+
+    # ──────────────────────────────────────────
+    # Step 10: Convert suggestions → real Tasks for one pet
+    # ──────────────────────────────────────────
+    print("-" * 58)
+    print("  Converting Biscuit's suggestions into real Tasks")
+    print("-" * 58)
+
+    biscuit_suggestions = suggest_tasks_for_pet(biscuit, retriever=retriever)
+    added = apply_suggestions_to_pet(biscuit, biscuit_suggestions)
+    print(f"  Added {len(added)} AI-suggested task(s) to {biscuit.name}.")
+
+    # Re-run the schedule to show RAG-added tasks coexisting with
+    # the user-entered ones from earlier in the demo.
+    print()
+    print("  Updated full-day schedule (all pets, including Biscuit):")
+    full_schedule = scheduler.get_daily_schedule(today)
+    for t in full_schedule:
+        print(f"    {t.due_time}  {t.description:<35}  ({t.pet_name})")
+    print()
 
     print("=" * 58)
 
